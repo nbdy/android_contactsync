@@ -29,7 +29,7 @@ public class DSync {
     public void show(final Context ctx){
         View v = LayoutInflater.from(ctx).inflate(R.layout.dialog_sync, null, false);
         ButterKnife.bind(this, v);
-        dialog = new AlertDialog.Builder(ctx).setTitle(R.string.syncing_with).setCancelable(false).show();
+        dialog = new AlertDialog.Builder(ctx).setTitle(R.string.syncing_with).setView(v).setCancelable(false).show();
     }
 
     public void done(){

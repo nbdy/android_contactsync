@@ -13,14 +13,16 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
-import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.provider.ContactsContract;
+import android.os.Handler;
+import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.blankj.utilcode.util.AppUtils;
@@ -44,13 +46,15 @@ import butterknife.OnClick;
 import io.eberlein.abt.BT;
 import io.eberlein.btcontactsync.dialogs.DChooseContacts;
 import io.eberlein.btcontactsync.dialogs.DSync;
+import io.eberlein.btcontactsync.events.EventReceivedContact;
+import io.eberlein.btcontactsync.events.EventSentContacts;
 import io.eberlein.btcontactsync.events.EventSyncContacts;
 import io.eberlein.btcontactsync.events.EventSyncContactsCancelled;
+import io.eberlein.btcontactsync.events.EventSyncDone;
 import io.eberlein.btcontactsync.events.EventSyncWithDevice;
 import io.eberlein.btcontactsync.viewholders.VHDevice;
 
 public class MainActivity extends AppCompatActivity {
-    private static final String TAG = "MainActivity";
     private static final String SERVICE_NAME = "contactSync";
     private static final UUID SERVICE_UUID = UUID.fromString("a1a0e0f4-9c6e-4b97-8107-1c7b092ef95f");
 
@@ -58,12 +62,24 @@ public class MainActivity extends AppCompatActivity {
     @BindView(R.id.btn_search) FloatingActionButton searchBtn;
     @BindView(R.id.cb_host) CheckBox hostCb;
     @BindView(R.id.tv_status) TextView statusTv;
+    @BindView(R.id.pb_search) ProgressBar searchPb;
 
-    private IServer server;
-    private IClient client;
+    private IServer server = null;
+    private IClient client = null;
+    private Handler handler = new Handler();
     private List<Contact> syncContacts;
+    private List<Contact> receivedContacts = new ArrayList<>();
     private DSync dialogSync = new DSync();
     private boolean btWasEnabled = false;
+    private BluetoothDevice syncDevice;
+    private boolean remoteDoneSending = false;
+
+    private Runnable stopServerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            server.cancel(true);
+        }
+    };
 
     private BT.ClassicScanner.OnEventListener eventListener = new BT.ClassicScanner.OnEventListener() {
         @Override
@@ -73,11 +89,15 @@ public class MainActivity extends AppCompatActivity {
         public void onDiscoveryFinished(List<BluetoothDevice> devices) {
             deviceList.addAll(devices);
             searchBtn.show();
+            searchPb.setVisibility(View.INVISIBLE);
+            hostCb.setVisibility(View.VISIBLE);
         }
 
         @Override
         public void onDiscoveryStarted() {
             searchBtn.hide();
+            searchPb.setVisibility(View.VISIBLE);
+            hostCb.setVisibility(View.INVISIBLE);
         }
     };
 
@@ -96,6 +116,7 @@ public class MainActivity extends AppCompatActivity {
             new DChooseContacts().show(this);
         } else {
             searchBtn.show();
+            handler.removeCallbacks(stopServerRunnable);
             server.cancel(true);
         }
     }
@@ -103,16 +124,13 @@ public class MainActivity extends AppCompatActivity {
     private BT.OnDataReceivedInterface onDataReceivedInterface = new BT.OnDataReceivedInterface() {
         @Override
         public void onReceived(String data) {
-            List<Contact> contacts = GsonUtils.fromJson(data, GsonUtils.getArrayType(Contact.class));
-            dialogSync.setReceived(contacts.size());
-            for(Contact c : contacts){
-                ContentValues v = new ContentValues();
-                v.put(ContactsContract.Data.RAW_CONTACT_ID, c.getId());
-                v.put(ContactsContract.Data.DISPLAY_NAME, c.getDisplayName());
-
-                //v.put(ContactsContract.CommonDataKinds.Phone.TYPE, c.getP);
+            Log.d(data, String.valueOf(client.getSendDataQueueSize()));
+            if(data.equals("DONE")) remoteDoneSending = true;
+            if(remoteDoneSending && client.getSendDataQueueSize() == 0) EventBus.getDefault().post(new EventSyncDone());
+            if(!data.equals("DONE")) {
+                Log.d("onReceived", data);
+                EventBus.getDefault().post(new EventReceivedContact(GsonUtils.fromJson(data, Contact.class)));
             }
-            // Todo process received contacts
         }
     };
 
@@ -124,13 +142,14 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onReady() {
-            addSendData(GsonUtils.toJson(syncContacts));
-            dialogSync.setSent(syncContacts.size());
+            for(Contact c : syncContacts) addSendData(GsonUtils.toJson(c));
+            EventBus.getDefault().post(new EventSentContacts());
+            addSendData("DONE");
         }
 
         @Override
         public void onFinished() {
-            dialogSync.done();
+
         }
     }
 
@@ -159,7 +178,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onDisconnected() {
-            client.stop();
+            if(client != null) client.stop();
         }
     };
 
@@ -171,19 +190,17 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
 
-        BT.create(this);
-        BT.Connector.register(this, connectionInterface);
-
         for(String p : new String[]{
                 Manifest.permission.BLUETOOTH,
                 Manifest.permission.BLUETOOTH_ADMIN,
                 Manifest.permission.WRITE_CONTACTS,
-                Manifest.permission.READ_CONTACTS
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.ACCESS_FINE_LOCATION
         }){
-            if(ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED){
-                ActivityCompat.requestPermissions(this, new String[]{p}, 420);
-            }
+            if(ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, new String[]{p}, 420);
         }
+
+        BT.create(this);
 
         if(!BT.supported()){
             new AlertDialog.Builder(this).setTitle(R.string.warning).setMessage(R.string.msg_no_bt_support).setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
@@ -196,6 +213,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             btWasEnabled = BT.isEnabled();
             if(!btWasEnabled) BT.enable();
+            BT.Connector.register(this, connectionInterface);
         }
 
         Contacts.initialize(this);
@@ -231,17 +249,52 @@ public class MainActivity extends AppCompatActivity {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEventSyncWithDevice(EventSyncWithDevice e){
-        // todo
+        syncDevice = e.getObject();
+        if(!BT.isDeviceBonded(syncDevice)) {
+            syncDevice.createBond();
+        } else {
+            new DChooseContacts().show(this);
+        }
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEventSyncContacts(EventSyncContacts e){
         syncContacts = e.getObject();
+        searchBtn.hide();
+        dialogSync.show(this);
+        if(hostCb.isChecked()) {
+            server.execute();
+            BT.setDiscoverable(this, 120);
+            handler.postDelayed(stopServerRunnable, 120 * 1000);
+        } else {
+            BT.Connector.connect(syncDevice, SERVICE_UUID);
+        }
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEventSyncContactsCancelled(EventSyncContactsCancelled e){
         server.cancel(true);
+        hostCb.setChecked(false);
+        handler.removeCallbacks(stopServerRunnable);
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onEventSyncDone(EventSyncDone e){
+        client.stop();
+        searchBtn.show();
+        for(Contact c : receivedContacts) Contacts.getQuery().updateContact(c);
+        dialogSync.done();
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onEventReceivedContact(EventReceivedContact e){
+        receivedContacts.add(e.getObject());
+        dialogSync.setReceived(receivedContacts.size());
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onEventSentContacts(EventSentContacts e){
+        dialogSync.setSent(syncContacts.size());
     }
 
     @Override

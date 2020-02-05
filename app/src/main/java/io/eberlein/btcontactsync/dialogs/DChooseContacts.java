@@ -35,11 +35,9 @@ public class DChooseContacts {
 
     private List<Contact> contacts = new ArrayList<>();
     private List<Contact> selectedContacts = new ArrayList<>();
-    private boolean allSelected = false;
 
     @OnCheckedChanged(R.id.cb_all)
     void onCbAllChanged(){
-        allSelected = cbAll.isChecked();
         selectedContacts.clear();
         if(cbAll.isChecked()) selectedContacts.addAll(contacts);
         recyclerView.getAdapter().notifyDataSetChanged();
@@ -54,10 +52,7 @@ public class DChooseContacts {
         @OnCheckedChanged(R.id.cb_sync)
         void onCbSyncChanged(){
             if(sync.isChecked()) selectedContacts.add(contact);
-            else {
-                allSelected = false;
-                selectedContacts.remove(contact);
-            }
+            else selectedContacts.remove(contact);
         }
 
         ContactHolder(View v){
@@ -105,7 +100,7 @@ public class DChooseContacts {
         }).setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                EventBus.getDefault().post(new EventSyncContacts(contacts));
+                EventBus.getDefault().post(new EventSyncContacts(selectedContacts));
                 dialog.dismiss();
             }
         }).show();
