@@ -27,25 +27,37 @@ import butterknife.ButterKnife;
 import butterknife.OnCheckedChanged;
 import io.eberlein.btcontactsync.R;
 import io.eberlein.btcontactsync.events.EventSyncContacts;
+import io.eberlein.btcontactsync.events.EventSyncContactsCancelled;
 
 public class DChooseContacts {
-    @BindView(R.id.rv_contacts)
-    RecyclerView recyclerView;
+    @BindView(R.id.rv_contacts) RecyclerView recyclerView;
+    @BindView(R.id.cb_all) CheckBox cbAll;
 
-    private List<Contact> chosenContacts = new ArrayList<>();
+    private List<Contact> contacts = new ArrayList<>();
+    private List<Contact> selectedContacts = new ArrayList<>();
+    private boolean allSelected = false;
+
+    @OnCheckedChanged(R.id.cb_all)
+    void onCbAllChanged(){
+        allSelected = cbAll.isChecked();
+        selectedContacts.clear();
+        if(cbAll.isChecked()) selectedContacts.addAll(contacts);
+        recyclerView.getAdapter().notifyDataSetChanged();
+    }
 
     class ContactHolder extends RecyclerView.ViewHolder {
         private Contact contact;
 
-        @BindView(R.id.tv_name)
-        TextView name;
-        @BindView(R.id.cb_sync)
-        CheckBox sync;
+        @BindView(R.id.tv_name) TextView name;
+        @BindView(R.id.cb_sync) CheckBox sync;
 
         @OnCheckedChanged(R.id.cb_sync)
         void onCbSyncChanged(){
-            if(sync.isChecked()) chosenContacts.add(contact);
-            else chosenContacts.remove(contact);
+            if(sync.isChecked()) selectedContacts.add(contact);
+            else {
+                allSelected = false;
+                selectedContacts.remove(contact);
+            }
         }
 
         ContactHolder(View v){
@@ -60,7 +72,9 @@ public class DChooseContacts {
     }
 
     public void show(final Context ctx){
-        final List<Contact> contacts = Contacts.getQuery().find();
+        contacts = Contacts.getQuery().find();
+        View v = LayoutInflater.from(ctx).inflate(R.layout.dialog_choose_contacts, null, false);
+        ButterKnife.bind(this, v);
         recyclerView.setAdapter(new RecyclerView.Adapter<ContactHolder>() {
             @NonNull
             @Override
@@ -70,7 +84,9 @@ public class DChooseContacts {
 
             @Override
             public void onBindViewHolder(@NonNull ContactHolder holder, int position) {
-                holder.setContact(contacts.get(position));
+                Contact cc = contacts.get(position);
+                holder.setContact(cc);
+                holder.sync.setChecked(selectedContacts.contains(cc));
             }
 
             @Override
@@ -80,17 +96,17 @@ public class DChooseContacts {
         });
         recyclerView.setLayoutManager(new LinearLayoutManager(ctx));
         recyclerView.addItemDecoration(new DividerItemDecoration(ctx, DividerItemDecoration.VERTICAL));
-        View v = LayoutInflater.from(ctx).inflate(R.layout.item_contact, null, false);
-        ButterKnife.bind(this, v);
         new AlertDialog.Builder(ctx).setTitle(R.string.choose_contacts).setView(v).setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
+                EventBus.getDefault().post(new EventSyncContactsCancelled());
                 dialog.dismiss();
             }
         }).setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                EventBus.getDefault().post(new EventSyncContacts(chosenContacts));
+                EventBus.getDefault().post(new EventSyncContacts(contacts));
+                dialog.dismiss();
             }
         }).show();
     }

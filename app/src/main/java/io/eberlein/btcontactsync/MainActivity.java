@@ -13,9 +13,11 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
@@ -41,7 +43,9 @@ import butterknife.OnCheckedChanged;
 import butterknife.OnClick;
 import io.eberlein.abt.BT;
 import io.eberlein.btcontactsync.dialogs.DChooseContacts;
+import io.eberlein.btcontactsync.dialogs.DSync;
 import io.eberlein.btcontactsync.events.EventSyncContacts;
+import io.eberlein.btcontactsync.events.EventSyncContactsCancelled;
 import io.eberlein.btcontactsync.events.EventSyncWithDevice;
 import io.eberlein.btcontactsync.viewholders.VHDevice;
 
@@ -58,6 +62,8 @@ public class MainActivity extends AppCompatActivity {
     private IServer server;
     private IClient client;
     private List<Contact> syncContacts;
+    private DSync dialogSync = new DSync();
+    private boolean btWasEnabled = false;
 
     private BT.ClassicScanner.OnEventListener eventListener = new BT.ClassicScanner.OnEventListener() {
         @Override
@@ -97,6 +103,15 @@ public class MainActivity extends AppCompatActivity {
     private BT.OnDataReceivedInterface onDataReceivedInterface = new BT.OnDataReceivedInterface() {
         @Override
         public void onReceived(String data) {
+            List<Contact> contacts = GsonUtils.fromJson(data, GsonUtils.getArrayType(Contact.class));
+            dialogSync.setReceived(contacts.size());
+            for(Contact c : contacts){
+                ContentValues v = new ContentValues();
+                v.put(ContactsContract.Data.RAW_CONTACT_ID, c.getId());
+                v.put(ContactsContract.Data.DISPLAY_NAME, c.getDisplayName());
+
+                //v.put(ContactsContract.CommonDataKinds.Phone.TYPE, c.getP);
+            }
             // Todo process received contacts
         }
     };
@@ -110,12 +125,12 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReady() {
             addSendData(GsonUtils.toJson(syncContacts));
-            // todo dialog issycing
+            dialogSync.setSent(syncContacts.size());
         }
 
         @Override
         public void onFinished() {
-            // todo dialog done/how many contacts have been synced
+            dialogSync.done();
         }
     }
 
@@ -162,7 +177,8 @@ public class MainActivity extends AppCompatActivity {
         for(String p : new String[]{
                 Manifest.permission.BLUETOOTH,
                 Manifest.permission.BLUETOOTH_ADMIN,
-                Manifest.permission.WRITE_CONTACTS
+                Manifest.permission.WRITE_CONTACTS,
+                Manifest.permission.READ_CONTACTS
         }){
             if(ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED){
                 ActivityCompat.requestPermissions(this, new String[]{p}, 420);
@@ -177,6 +193,9 @@ public class MainActivity extends AppCompatActivity {
                     AppUtils.exitApp();
                 }
             }).show();
+        } else {
+            btWasEnabled = BT.isEnabled();
+            if(!btWasEnabled) BT.enable();
         }
 
         Contacts.initialize(this);
@@ -205,6 +224,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if(!btWasEnabled) BT.disable();
         BT.destroy(this);
         BT.Connector.unregister(this);
     }
@@ -216,7 +236,12 @@ public class MainActivity extends AppCompatActivity {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEventSyncContacts(EventSyncContacts e){
-        // todo
+        syncContacts = e.getObject();
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onEventSyncContactsCancelled(EventSyncContactsCancelled e){
+        server.cancel(true);
     }
 
     @Override
