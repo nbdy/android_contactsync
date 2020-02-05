@@ -78,6 +78,8 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void run() {
             server.cancel(true);
+            dialogSync.dismiss();
+            hostCb.setChecked(false);
         }
     };
 
@@ -127,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d(data, String.valueOf(client.getSendDataQueueSize()));
             if(data.equals("DONE")) remoteDoneSending = true;
             if(remoteDoneSending && client.getSendDataQueueSize() == 0) EventBus.getDefault().post(new EventSyncDone());
-            if(!data.equals("DONE")) {
+            if(!data.equals("DONE") && !data.isEmpty()) {
                 Log.d("onReceived", data);
                 EventBus.getDefault().post(new EventReceivedContact(GsonUtils.fromJson(data, Contact.class)));
             }
@@ -149,7 +151,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onFinished() {
-
+            EventBus.getDefault().post(new EventSyncDone());
         }
     }
 
@@ -282,8 +284,12 @@ public class MainActivity extends AppCompatActivity {
     public void onEventSyncDone(EventSyncDone e){
         client.stop();
         searchBtn.show();
-        for(Contact c : receivedContacts) Contacts.getQuery().updateContact(c);
+        for(Contact c : receivedContacts) {
+            Log.d("inserting", GsonUtils.toJson(c));
+            Contacts.getQuery().updateContact(c);
+        }
         dialogSync.done();
+        hostCb.setChecked(false);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
