@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.greenrobot.eventbus.EventBus;
 
 import butterknife.BindView;
+import butterknife.ButterKnife;
 import butterknife.OnClick;
 import io.eberlein.btcontactsync.R;
 import io.eberlein.btcontactsync.events.EventSyncWithDevice;
@@ -26,6 +27,7 @@ public class VHDevice extends RecyclerView.ViewHolder {
 
     public VHDevice(View v){
         super(v);
+        ButterKnife.bind(this, v);
     }
 
     public void setDevice(BluetoothDevice device){

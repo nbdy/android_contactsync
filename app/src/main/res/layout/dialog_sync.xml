@@ -2,20 +2,57 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="wrap_content">
 
-    <TextView
-        android:id="@+id/tv_msg"
+    <ProgressBar
+        android:id="@+id/pb_sync"
         android:layout_marginTop="8dp"
         android:layout_marginStart="8dp"
-        android:text="@string/msg_sync_with_device"
+        android:layout_marginBottom="8dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"/>
 
-    <CheckBox
-        android:id="@+id/cb_all"
-        android:layout_below="@id/tv_msg"
+    <TextView
+        android:id="@+id/tv_lbl_rx"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/rx"
         android:layout_marginTop="8dp"
-        android:layout_marginStart="8dp"
-        android:text="@string/all_contacts"
+        android:layout_toEndOf="@id/pb_sync"
+        android:layout_marginStart="16dp"
+        android:layout_alignBaseline="@id/pb_sync"/>
+
+    <TextView
+        android:id="@+id/tv_lbl_tx"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/tx"
+        android:layout_below="@id/tv_lbl_rx"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="16dp"
+        android:layout_toEndOf="@id/pb_sync" />
+
+    <TextView
+        android:id="@+id/tv_received"
+        android:layout_toEndOf="@id/tv_lbl_rx"
+        android:layout_alignBaseline="@id/tv_lbl_rx"
+        android:layout_marginStart="4dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <TextView
+        android:id="@+id/tv_sent"
+        android:layout_toEndOf="@id/tv_lbl_tx"
+        android:layout_alignBaseline="@id/tv_lbl_tx"
+        android:layout_marginStart="4dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <Button
+        android:id="@+id/btn_ok"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:layout_marginEnd="8dp"
+        android:text="@string/ok"
+        android:visibility="invisible"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"/>
 
